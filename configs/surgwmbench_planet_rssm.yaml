@@ -1,0 +1,49 @@
+dataset:
+  name: SurgWMBench
+  root: /mnt/hdd1/neurips2026_dataset_track/SurgWMBench
+  train_manifest: manifests/train.jsonl
+  val_manifest: manifests/val.jsonl
+  image_size: 128
+  frame_sampling: sparse_anchors
+  interpolation_method: linear
+  use_dense_pseudo: false
+
+encoder:
+  embed_dim: 512
+  channels: [32, 64, 128, 256]
+  activation: elu
+
+decoder:
+  channels: [256, 128, 64, 32]
+  activation: elu
+
+rssm:
+  stoch_dim: 32
+  deter_dim: 200
+  hidden_dim: 200
+  action_dim: 3
+  min_std: 0.1
+  activation: elu
+
+coordinate_head:
+  hidden_dim: 256
+  output_dim: 2
+  sigmoid_output: true
+
+loss:
+  recon_weight: 1.0
+  kl_weight: 1.0
+  free_nats: 3.0
+  sparse_coord_weight: 10.0
+  smoothness_weight: 0.1
+
+train:
+  batch_size: 4
+  num_workers: 4
+  epochs: 1
+  lr: 3e-4
+  weight_decay: 1e-5
+  precision: amp
+  seed: 42
+  grad_clip_norm: 100.0
+  compile: false

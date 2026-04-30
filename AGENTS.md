@@ -39,11 +39,14 @@ Implemented components:
 - `planet_torch_surgwmbench/data/surgwmbench.py`
 - `planet_torch_surgwmbench/data/raw_video.py`
 - `planet_torch_surgwmbench/data/collate.py`
+- `planet_torch_surgwmbench/models/`
+- `planet_torch_surgwmbench/training/train_rssm.py`
 - `planet_torch_surgwmbench/evaluation/metrics.py`
+- `configs/surgwmbench_planet_rssm.yaml`
 - `tools/make_toy_surgwmbench.py`
 - `tools/validate_surgwmbench_loader.py`
 
-This first pass intentionally stops before RSSM, CEM, model wrappers, training loops, and evaluation rollout scripts.
+The current training path supports a minimal PlaNet-style RSSM world-model smoke run. CEM, policy planning, dense auxiliary evaluation scripts, and full rollout evaluation are still pending.
 
 ## Validation Commands
 
@@ -68,6 +71,23 @@ Loader/collate smoke:
 
 ```sh
 python -c "from planet_torch_surgwmbench.data import SurgWMBenchClipDataset, collate_sparse_anchors; root='/mnt/hdd1/neurips2026_dataset_track/SurgWMBench'; ds=SurgWMBenchClipDataset(root,'manifests/train.jsonl',image_size=128,frame_sampling='sparse_anchors'); batch=collate_sparse_anchors([ds[0], ds[1]]); print(batch['frames'].shape, batch['actions_delta_dt'].shape)"
+```
+
+RSSM training smoke:
+
+```sh
+python -m planet_torch_surgwmbench.training.train_rssm \
+  --dataset-root /mnt/hdd1/neurips2026_dataset_track/SurgWMBench \
+  --train-manifest manifests/train.jsonl \
+  --val-manifest manifests/val.jsonl \
+  --config configs/surgwmbench_planet_rssm.yaml \
+  --output /tmp/planet_surgwmbench_rssm_smoke.pt \
+  --batch-size 2 \
+  --num-workers 2 \
+  --epochs 1 \
+  --max-train-batches 2 \
+  --max-val-batches 1 \
+  --debug-shapes
 ```
 
 ## Coding Style
