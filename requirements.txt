@@ -1,0 +1,13 @@
+# PyTorch SurgWMBench adaptation dependencies.
+# Install a CUDA-specific PyTorch wheel from https://pytorch.org/get-started/locally/
+# if the generic package does not match your machine.
+torch>=2.0
+torchvision>=0.15
+numpy>=1.24
+Pillow>=9.0
+PyYAML>=6.0
+tqdm>=4.65
+pytest>=7.0
+
+# Required for SurgWMBenchRawVideoDataset backend="opencv".
+opencv-python-headless>=4.8

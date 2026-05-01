@@ -1,19 +1,183 @@
-# Deep Planning Network
+# PlaNet for SurgWMBench
 
-Danijar Hafner, Timothy Lillicrap, Ian Fischer, Ruben Villegas, David Ha, Honglak Lee, James Davidson
+This repository starts from the official Google Research PlaNet implementation
+of **Learning Latent Dynamics for Planning from Pixels** and adds a modern
+PyTorch 2.x baseline path for:
 
-![PlaNet policies and predictions](https://imgur.com/UeeQIfo.gif)
+**SurgWMBench: A Dataset and World-Model Benchmark for Surgical Instrument Motion Planning**
 
-This project provides the open source implementation of the PlaNet agent
-introduced in [Learning Latent Dynamics for Planning from Pixels][paper].
-PlaNet is a purely model-based reinforcement learning algorithm that solves
-control tasks from images by efficient planning in a learned latent space.
-PlaNet competes with top model-free methods in terms of final performance and
-training time while using substantially less interaction with the environment.
+The original PlaNet code under `planet/` is TensorFlow 1.x code and is kept for
+reference. The SurgWMBench adaptation lives in `planet_torch_surgwmbench/` and
+does not patch or depend on TensorFlow.
 
-If you find this open source release useful, please reference in your paper:
+## Current Status
 
+Implemented:
+
+- SurgWMBench manifest-based clip loader.
+- Sparse 20-human-anchor mode.
+- Dense variable-length interpolation mode.
+- Frame and raw-video window datasets.
+- Collate functions that produce action deltas `[dx_norm, dy_norm, dt]`.
+- Trajectory metrics for sparse/dense coordinate evaluation.
+- Toy SurgWMBench generator and read-only dataset validator.
+- A trainable PyTorch PlaNet-style RSSM smoke baseline:
+  - image encoder
+  - action-conditioned RSSM
+  - stochastic and deterministic latent state
+  - observation decoder
+  - coordinate decoder
+  - reconstruction, KL, coordinate, and smoothness losses
+
+Still pending:
+
+- CEM latent planner.
+- Policy controller.
+- Sparse rollout evaluation script.
+- Dense auxiliary evaluation script.
+- Visualization scripts.
+- Full training/evaluation documentation for all stages.
+
+## Repository Layout
+
+```text
+planet/
+  Original TensorFlow 1.x PlaNet implementation.
+
+planet_torch_surgwmbench/
+  data/          SurgWMBench loaders, transforms, collators.
+  models/        PyTorch encoder, decoder, RSSM, coordinate head.
+  training/      RSSM training entry point.
+  evaluation/    Trajectory metrics.
+  utils/         Config and seeding helpers.
+
+configs/
+  surgwmbench_planet_rssm.yaml
+
+tools/
+  make_toy_surgwmbench.py
+  validate_surgwmbench_loader.py
+
+tests/
+  Loader, collate, metrics, and RSSM smoke tests.
 ```
+
+## Installation
+
+Use Python 3.10+ and PyTorch 2.x. Install dependencies with:
+
+```sh
+python -m pip install -r requirements.txt
+```
+
+For CUDA builds of PyTorch, install the wheel matching your local CUDA/runtime
+from the official PyTorch instructions if the generic `torch` package does not
+match your machine.
+
+## SurgWMBench Dataset
+
+The local dataset root used on this machine is:
+
+```sh
+/mnt/hdd1/neurips2026_dataset_track/SurgWMBench
+```
+
+Expected public layout:
+
+```text
+SurgWMBench/
+  videos/
+  clips/
+  interpolations/
+  manifests/
+    train.jsonl
+    val.jsonl
+    test.jsonl
+    all.jsonl
+  metadata/
+```
+
+Rules used by this baseline:
+
+- Use the official manifests. Do not create random splits.
+- Every clip has exactly 20 human anchors.
+- Clips are variable-length; do not assume 20 frames.
+- Sparse human-anchor metrics are primary.
+- Dense interpolation coordinates are auxiliary pseudo labels.
+- Coordinates are `[x, y]` pixels with top-left origin.
+- Training uses normalized coordinates internally.
+- Pixel coordinates are preserved for reporting.
+
+## Validate the Dataset
+
+Run a read-only validation sample:
+
+```sh
+python -m tools.validate_surgwmbench_loader \
+  --dataset-root /mnt/hdd1/neurips2026_dataset_track/SurgWMBench \
+  --manifest manifests/train.jsonl \
+  --interpolation-method linear \
+  --check-files \
+  --num-samples 8
+```
+
+Expected output:
+
+```text
+SurgWMBench validation passed.
+```
+
+## Loader Smoke Test
+
+```sh
+python -c "from planet_torch_surgwmbench.data import SurgWMBenchClipDataset, collate_sparse_anchors; root='/mnt/hdd1/neurips2026_dataset_track/SurgWMBench'; ds=SurgWMBenchClipDataset(root,'manifests/train.jsonl',image_size=128,frame_sampling='sparse_anchors'); batch=collate_sparse_anchors([ds[0], ds[1]]); print(batch['frames'].shape, batch['actions_delta_dt'].shape)"
+```
+
+Expected shape pattern:
+
+```text
+torch.Size([2, 20, 3, 128, 128]) torch.Size([2, 19, 3])
+```
+
+## Train RSSM Smoke Baseline
+
+The current training entry point is:
+
+```sh
+python -m planet_torch_surgwmbench.training.train_rssm \
+  --dataset-root /mnt/hdd1/neurips2026_dataset_track/SurgWMBench \
+  --train-manifest manifests/train.jsonl \
+  --val-manifest manifests/val.jsonl \
+  --config configs/surgwmbench_planet_rssm.yaml \
+  --output /tmp/planet_surgwmbench_rssm_smoke.pt \
+  --batch-size 2 \
+  --num-workers 2 \
+  --epochs 1 \
+  --max-train-batches 2 \
+  --max-val-batches 1 \
+  --debug-shapes
+```
+
+This command has been run successfully on the current machine with CUDA and a
+real SurgWMBench subset. For full training, remove the `--max-train-batches`
+and `--max-val-batches` limits and choose an output path outside `/tmp`.
+
+## Tests
+
+Run the focused PyTorch SurgWMBench tests:
+
+```sh
+pytest tests/test_surgwmbench_dataset.py \
+  tests/test_surgwmbench_collate.py \
+  tests/test_metrics.py \
+  tests/test_rssm_training_smoke.py
+```
+
+## Original PlaNet Reference
+
+The original PlaNet agent was introduced in:
+
+```bibtex
 @inproceedings{hafner2019planet,
   title={Learning Latent Dynamics for Planning from Pixels},
   author={Hafner, Danijar and Lillicrap, Timothy and Fischer, Ian and Villegas, Ruben and Ha, David and Lee, Honglak and Davidson, James},
@@ -23,17 +187,7 @@ If you find this open source release useful, please reference in your paper:
 }
 ```
 
-## Method
-
-![PlaNet model diagram](https://i.imgur.com/fpvrAqw.png)
-
-PlaNet models the world as a compact sequence of hidden states. For planning,
-we first encode the history of past images into the current state. From there,
-we efficiently predict future rewards for multiple action sequences in latent
-space. We execute the first action of the best sequence found and replan after
-observing the next image.
-
-Find more information:
+Original project links:
 
 - [Google AI Blog post][blog]
 - [Project website][website]
@@ -43,68 +197,7 @@ Find more information:
 [website]: https://danijar.com/project/planet/
 [paper]: https://arxiv.org/pdf/1811.04551.pdf
 
-## Instructions
-
-To train an agent, install the dependencies and then run:
-
-```sh
-python3 -m planet.scripts.train --logdir /path/to/logdir --params '{tasks: [cheetah_run]}'
-```
-
-The code prints `nan` as the score for iterations during which no summaries
-were computed.
-
-The available tasks are listed in `scripts/tasks.py`. The default parameters
-can be found in `scripts/configs.py`. To run the experiments from our
-paper, pass the following parameters to `--params {...}` in addition to the
-list of tasks:
-
-| Experiment | Parameters |
-| :--------- | :--------- |
-| PlaNet | No additional parameters. |
-| Random data collection | `planner_iterations: 0, train_action_noise: 1.0` |
-| Purely deterministic | `mean_only: True, divergence_scale: 0.0` |
-| Purely stochastic | `model: ssm` |
-| One agent all tasks | `collect_every: 30000` |
-
-Please note that the agent has seen some improvements so the results may be a
-bit different now.
-
-## Modifications
-
-These are good places to start when modifying the code:
-
-| Directory | Description |
-| :-------- | :---------- |
-| `scripts/configs.py` | Add new parameters or change defaults. |
-| `scripts/tasks.py` | Add or modify environments. |
-| `models` | Add or modify latent transition models. |
-| `networks` | Add or modify encoder and  decoder networks. |
-
-Tips for development:
-
-- You can set `--config debug` to reduce the episode length, batch size, and
-  collect data more freqnently. This helps to quickly reach all parts of the
-  code.
-- You can use `--num_runs 1000 --resume_runs False` to automatically start new
-  runs in sub directories of the logdir every time to execute the script.
-- Environments live in separate processes by default. Some environments work
-  better when separated into threads instead by specifying `--params
-  '{isolate_envs: thread}'`.
-
-## Dependencies
-
-The code was tested under Ubuntu 18 and uses these packages:
-
-- tensorflow-gpu==1.13.1
-- tensorflow_probability==0.6.0
-- dm_control (`egl` [rendering option][dmc-rendering] recommended)
-- gym
-- scikit-image
-- scipy
-- ruamel.yaml
-- matplotlib
-
-[dmc-rendering]: https://github.com/deepmind/dm_control#rendering
+The original TensorFlow dependencies remain documented in `setup.py`, but they
+are not required for the PyTorch SurgWMBench adaptation.
 
 Disclaimer: This is not an official Google product.
